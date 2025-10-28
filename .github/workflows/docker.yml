@@ -35,13 +35,14 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           flavor: |
-            latest=auto
+            latest=false
           tags: |
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short
+            type=raw,value=latest,enable={{is_tag && github.ref_name != 'latest'}}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
