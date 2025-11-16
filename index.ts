@@ -68,7 +68,11 @@ const { file } = getAllQueryString();
 
 const onCreateNew = async (ext: string) => {
   const { removeLoading } = showLoading();
-  hideControlPanel();
+  // Hide control panel if it's visible (e.g., when called from window.onCreateNew)
+  const container = document.querySelector('#control-panel-container') as HTMLElement;
+  if (container && container.style.display !== 'none') {
+    hideControlPanel();
+  }
   setDocmentObj({
     fileName: 'New_Document' + ext,
     file: undefined,
@@ -99,26 +103,35 @@ document.body.appendChild(fileInput);
 const onOpenDocument = async () => {
   return new Promise((resolve) => {
     let resolved = false;
+    let cancelTimeout: NodeJS.Timeout | null = null;
 
-    // Set up a timeout to detect if user cancelled (no change event)
+    // Clear previous event handler and value
+    fileInput.onchange = null;
+    fileInput.value = '';
+
+    // Set up a longer timeout to detect if user cancelled (no change event)
     // This handles the case where user cancels without triggering onchange
-    const cancelTimeout = setTimeout(() => {
+    // Use a longer timeout (5 seconds) to avoid false positives
+    cancelTimeout = setTimeout(() => {
       if (!resolved) {
         resolved = true;
         fileInput.value = '';
+        fileInput.onchange = null;
         resolve(false);
       }
-    }, 1000);
+    }, 5000);
 
-    // Trigger file picker click event
-    fileInput.click();
-
-    fileInput.onchange = async (event) => {
-      clearTimeout(cancelTimeout);
+    // Define the change handler
+    const handleChange = async (event: Event) => {
+      if (cancelTimeout) {
+        clearTimeout(cancelTimeout);
+        cancelTimeout = null;
+      }
 
       const file = (event.target as HTMLInputElement).files?.[0];
-      // Clear file selection so the same file can be selected again
-      fileInput.value = '';
+      
+      // Clear the handler to prevent multiple triggers
+      fileInput.onchange = null;
 
       if (file && !resolved) {
         resolved = true;
@@ -133,6 +146,8 @@ const onOpenDocument = async () => {
         const { fileName, file: fileBlob } = getDocmentObj();
         await handleDocumentOperation({ file: fileBlob, fileName, isNew: !fileBlob });
         removeLoading();
+        // Clear file selection so the same file can be selected again
+        fileInput.value = '';
         // Show menu guide after document is loaded
         setTimeout(() => {
           showMenuGuide();
@@ -141,9 +156,16 @@ const onOpenDocument = async () => {
       } else if (!resolved) {
         // onchange fired but no file selected (user cancelled or cleared selection)
         resolved = true;
+        fileInput.value = '';
         resolve(false);
       }
     };
+
+    // Set the change handler
+    fileInput.onchange = handleChange;
+
+    // Trigger file picker click event
+    fileInput.click();
   });
 };
 
@@ -151,7 +173,10 @@ const onOpenDocument = async () => {
 const hideControlPanel = () => {
   const container = document.querySelector('#control-panel-container') as HTMLElement;
   if (container) {
+    // Immediately disable pointer events to prevent blocking
+    container.style.pointerEvents = 'none';
     container.style.opacity = '0';
+    // Hide after transition for smooth animation
     setTimeout(() => {
       container.style.display = 'none';
       showTopFloatingBar();
@@ -592,20 +617,20 @@ const createControlPanel = () => {
   buttonGroup.appendChild(uploadButton);
 
   const newWordButton = createTextButton('new-word-button', t('newWord'), () => {
-    onCreateNew('.docx');
     hideControlPanel();
+    onCreateNew('.docx');
   });
   buttonGroup.appendChild(newWordButton);
 
   const newExcelButton = createTextButton('new-excel-button', t('newExcel'), () => {
-    onCreateNew('.xlsx');
     hideControlPanel();
+    onCreateNew('.xlsx');
   });
   buttonGroup.appendChild(newExcelButton);
 
   const newPptxButton = createTextButton('new-pptx-button', t('newPowerPoint'), () => {
-    onCreateNew('.pptx');
     hideControlPanel();
+    onCreateNew('.pptx');
   });
   buttonGroup.appendChild(newPptxButton);
 
