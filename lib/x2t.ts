@@ -247,6 +247,19 @@ class X2TConverter {
 
     const result = this.x2tModule.ccall('main1', 'number', ['string'], [paramsPath]);
     if (result !== 0) {
+      // Read the params XML for debugging
+      try {
+        const paramsContent = this.x2tModule.FS.readFile(paramsPath, { encoding: 'binary' });
+        // Convert binary to string for logging
+        if (paramsContent instanceof Uint8Array) {
+          const paramsText = new TextDecoder('utf-8').decode(paramsContent);
+          console.error('Conversion failed. Parameters XML:', paramsText);
+        } else {
+          console.error('Conversion failed. Parameters XML:', paramsContent);
+        }
+      } catch (_e) {
+        // Ignore if we can't read the params file
+      }
       throw new Error(`Conversion failed with code: ${result}`);
     }
   }
@@ -299,6 +312,73 @@ class X2TConverter {
   }
 
   /**
+   * Load xlsx library dynamically from CDN
+   */
+  private async loadXlsxLibrary(): Promise<any> {
+    // Check if xlsx is already loaded
+    if (typeof window !== 'undefined' && (window as any).XLSX) {
+      return (window as any).XLSX;
+    }
+
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js';
+      script.onload = () => {
+        if (typeof window !== 'undefined' && (window as any).XLSX) {
+          resolve((window as any).XLSX);
+        } else {
+          reject(new Error('Failed to load xlsx library'));
+        }
+      };
+      script.onerror = () => {
+        reject(new Error('Failed to load xlsx library from CDN'));
+      };
+      document.head.appendChild(script);
+    });
+  }
+
+  /**
+   * Convert CSV to XLSX format using SheetJS library
+   * This is a workaround since x2t may not support CSV directly
+   */
+  private async convertCsvToXlsx(csvData: Uint8Array, fileName: string): Promise<File> {
+    try {
+      // Load xlsx library
+      const XLSX = await this.loadXlsxLibrary();
+
+      // Remove UTF-8 BOM if present
+      let csvText: string;
+      if (csvData.length >= 3 && csvData[0] === 0xEF && csvData[1] === 0xBB && csvData[2] === 0xBF) {
+        csvText = new TextDecoder('utf-8').decode(csvData.slice(3));
+      } else {
+        // Try UTF-8 first, fallback to other encodings if needed
+        try {
+          csvText = new TextDecoder('utf-8').decode(csvData);
+        } catch {
+          csvText = new TextDecoder('latin1').decode(csvData);
+        }
+      }
+
+      // Parse CSV using SheetJS
+      const workbook = XLSX.read(csvText, { type: 'string', raw: false });
+
+      // Convert to XLSX binary format
+      const xlsxBuffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
+
+      // Create File object
+      const xlsxFileName = fileName.replace(/\.csv$/i, '.xlsx');
+      return new File([xlsxBuffer], xlsxFileName, {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+    } catch (error) {
+      throw new Error(
+        `Failed to convert CSV to XLSX: ${error instanceof Error ? error.message : 'Unknown error'}. ` +
+        'Please convert your CSV file to XLSX format manually and try again.'
+      );
+    }
+  }
+
+  /**
    * Convert document to bin format
    */
   async convertDocument(file: File): Promise<ConversionResult> {
@@ -313,7 +393,58 @@ class X2TConverter {
       const arrayBuffer = await file.arrayBuffer();
       const data = new Uint8Array(arrayBuffer);
 
-      // Generate safe file name
+      // Handle CSV files - x2t may not support them directly, so convert to XLSX first
+      if (fileExt.toLowerCase() === 'csv') {
+        if (data.length === 0) {
+          throw new Error('CSV file is empty');
+        }
+        console.log('CSV file detected. Converting to XLSX format...');
+        console.log('CSV file size:', data.length, 'bytes');
+        
+        // Convert CSV to XLSX first
+        try {
+          const xlsxFile = await this.convertCsvToXlsx(data, fileName);
+          console.log('CSV converted to XLSX, now converting with x2t...');
+          
+          // Now convert the XLSX file using x2t
+          const xlsxArrayBuffer = await xlsxFile.arrayBuffer();
+          const xlsxData = new Uint8Array(xlsxArrayBuffer);
+          
+          // Use the XLSX file for conversion
+          const sanitizedName = this.sanitizeFileName(xlsxFile.name);
+          const inputPath = `/working/${sanitizedName}`;
+          const outputPath = `${inputPath}.bin`;
+
+          // Write XLSX file to virtual file system
+          this.x2tModule!.FS.writeFile(inputPath, xlsxData);
+
+          // Create conversion parameters - no special params needed for XLSX
+          const params = this.createConversionParams(inputPath, outputPath, '');
+          this.x2tModule!.FS.writeFile('/working/params.xml', params);
+
+          // Execute conversion
+          this.executeConversion('/working/params.xml');
+
+          // Read conversion result
+          const result = this.x2tModule!.FS.readFile(outputPath);
+          const media = this.readMediaFiles();
+
+          return {
+            fileName: sanitizedName,
+            type: documentType,
+            bin: result,
+            media,
+          };
+        } catch (conversionError: any) {
+          // If conversion fails, provide helpful error message
+          throw new Error(
+            `Failed to convert CSV file: ${conversionError?.message || 'Unknown error'}. ` +
+            'Please ensure your CSV file is properly formatted and try again.'
+          );
+        }
+      }
+
+      // For all other file types, use standard conversion
       const sanitizedName = this.sanitizeFileName(fileName);
       const inputPath = `/working/${sanitizedName}`;
       const outputPath = `${inputPath}.bin`;
@@ -321,8 +452,8 @@ class X2TConverter {
       // Write file to virtual file system
       this.x2tModule!.FS.writeFile(inputPath, data);
 
-      // Create conversion parameters
-      const params = this.createConversionParams(inputPath, outputPath);
+      // Create conversion parameters - no special params needed for non-CSV files
+      const params = this.createConversionParams(inputPath, outputPath, '');
       this.x2tModule!.FS.writeFile('/working/params.xml', params);
 
       // Execute conversion
@@ -341,6 +472,52 @@ class X2TConverter {
     } catch (error) {
       throw new Error(`Document conversion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  /**
+   * Attempt to convert CSV directly using x2t (may fail)
+   */
+  private async convertCsvDirectly(
+    _file: File,
+    data: Uint8Array,
+    fileName: string,
+    documentType: DocumentType,
+  ): Promise<ConversionResult> {
+    // Handle UTF-8 BOM
+    let fileData = data;
+    const hasBOM = data.length >= 3 && data[0] === 0xEF && data[1] === 0xBB && data[2] === 0xBF;
+    if (!hasBOM) {
+      const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+      fileData = new Uint8Array(bom.length + data.length);
+      fileData.set(bom, 0);
+      fileData.set(data, bom.length);
+    }
+
+    const sanitizedName = this.sanitizeFileName(fileName);
+    const inputPath = `/working/${sanitizedName}`;
+    const outputPath = `${inputPath}.bin`;
+
+    // Write file to virtual file system
+    this.x2tModule!.FS.writeFile(inputPath, fileData);
+
+    // Try with format specification
+    const additionalParams = '<m_nFormatFrom>260</m_nFormatFrom>';
+    const params = this.createConversionParams(inputPath, outputPath, additionalParams);
+    this.x2tModule!.FS.writeFile('/working/params.xml', params);
+
+    // Execute conversion - this will likely fail with error 89
+    this.executeConversion('/working/params.xml');
+
+    // If we get here, conversion succeeded (unlikely for CSV)
+    const result = this.x2tModule!.FS.readFile(outputPath);
+    const media = this.readMediaFiles();
+
+    return {
+      fileName: sanitizedName,
+      type: documentType,
+      bin: result,
+      media,
+    };
   }
 
   /**
