@@ -9,6 +9,10 @@ const __dirname = path.dirname(__filename);
 export default defineConfig({
   base: './',
   publicDir: 'public',
+  build: {
+    outDir: resolve(__dirname, 'vscode-extension', 'media'),
+    emptyOutDir: false,
+  },
   resolve: {
     alias: {
       '@/lib': resolve(__dirname, 'lib'),

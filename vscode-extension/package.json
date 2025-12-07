@@ -1,0 +1,76 @@
+{
+  "name": "document-vscode-extension",
+  "version": "0.0.1",
+  "private": true,
+  "description": "VS Code extension for the document webview",
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onCommand:ranuts.openOfficeEditor",
+    "onCustomEditor:ranuts.officeEditor"
+  ],
+  "scripts": {
+    "build:webview": "vite build",
+    "build:extension": "tsc -p ./tsconfig.extension.json && esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
+    "build": "pnpm run build:webview && pnpm run build:extension",
+    "package": "vsce package",
+    "watch:webview": "vite build --watch",
+    "watch:extension": "tsc -p ./tsconfig.extension.json --watch"
+  },
+  "engines": {
+    "vscode": "^1.92.0"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "ranuts.openOfficeEditor",
+        "title": "Open with Ranuts Office Editor",
+        "category": "Ranuts"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "ranuts.officeEditor",
+        "displayName": "Ranuts Office Editor",
+        "selector": [
+          { "filenamePattern": "*.docx" },
+          { "filenamePattern": "*.doc" },
+          { "filenamePattern": "*.xlsx" },
+          { "filenamePattern": "*.xls" },
+          { "filenamePattern": "*.pptx" },
+          { "filenamePattern": "*.ppt" },
+          { "filenamePattern": "*.csv" },
+          { "filenamePattern": "*.odt" },
+          { "filenamePattern": "*.ods" },
+          { "filenamePattern": "*.odp" }
+        ],
+        "priority": "default"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "ranuts.openOfficeEditor",
+          "group": "navigation@5",
+          "when": "resourceExtname =~ /\\.(docx|doc|xlsx|xls|pptx|ppt|csv|odt|ods|odp)$/i"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "ranuts.openOfficeEditor",
+          "when": "true"
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "ranui": "0.1.10-alpha-27",
+    "ranuts": "0.1.0-alpha-23"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/vscode": "^1.92.0",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.9.3"
+  }
+}

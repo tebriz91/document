@@ -2,7 +2,7 @@ import { createObjectURL, getExtensions, scriptOnLoad } from 'ranuts/utils';
 import 'ranui/message';
 import { t } from './i18n';
 import type { BinConversionResult, ConversionResult, DocumentType, EmscriptenModule } from './document-types';
-import { BASE_PATH, DOCUMENT_TYPE_MAP } from './document-utils';
+import { getBasePath, BASE_PATH, DOCUMENT_TYPE_MAP } from './document-utils';
 
 export class X2TConverter {
   private x2tModule: EmscriptenModule | null = null;
@@ -14,7 +14,7 @@ export class X2TConverter {
   private readonly DOCUMENT_TYPE_MAP: Record<string, DocumentType> = DOCUMENT_TYPE_MAP;
 
   private readonly WORKING_DIRS = ['/working', '/working/media', '/working/fonts', '/working/themes'];
-  private readonly SCRIPT_PATH = `${BASE_PATH}wasm/x2t/x2t.js`;
+  private readonly SCRIPT_PATH = `${getBasePath()}wasm/x2t/x2t.js`;
   private readonly INIT_TIMEOUT = 300000;
 
   /**

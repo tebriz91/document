@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "lib": ["ES2020"],
+    "moduleResolution": "Node",
+    "outDir": "out",
+    "rootDir": "src",
+    "sourceMap": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": ["node", "vscode"]
+  },
+  "include": [
+    "src/extension.ts",
+    "src/editorProvider.ts",
+    "src/types/**/*.ts"
+  ],
+  "exclude": ["src/webview/**/*"]
+}

@@ -11,3 +11,5 @@ cache
 vite.config.ts.timestamp*
 config.ts.timestamp*
 dist
+
+vscode-extension/media/assets

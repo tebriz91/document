@@ -1,4 +1,5 @@
 import { getMime } from 'ranuts/utils';
+import { getBasePath as resolveBase } from './path-resolver';
 import type { DocumentType } from './document-types';
 
 /**
@@ -6,20 +7,7 @@ import type { DocumentType } from './document-types';
  * - GitHub Pages: uses /document/ path
  * - Docker/Other: uses root path /
  */
-export const getBasePath = (): string => {
-  if (typeof window === 'undefined') {
-    return '/';
-  }
-
-  const pathname = window.location.pathname;
-  // Check if we're in GitHub Pages (path starts with /document/ or contains /document/)
-  if (pathname.startsWith('/document/') || pathname === '/document') {
-    return '/document/';
-  }
-  // Docker or other deployments use root path
-  return '/';
-};
-
+export const getBasePath = (): string => resolveBase();
 export const BASE_PATH = getBasePath();
 
 /**
